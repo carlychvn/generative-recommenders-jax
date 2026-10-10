@@ -1,63 +1,65 @@
-# JAX-HTSU: Hierarchical Temporal Sequential User Modeling
+# Generative Recommenders in JAX
 
-A JAX/Flax reimplementation of **HTSU (Hierarchical Temporal Sequential User modeling)**, a neural architecture for sequential recommendation and user behavior prediction.
+A JAX/Flax reimplementation of **HSTU (Hierarchical Sequential Transduction Units)**, the generative recommender architecture from Meta's *Actions Speak Louder than Words: Trillion-Parameter Sequential Transducers for Generative Recommendations* (Zhai et al., ICML 2024).
+
+The Python package is named `htsu` and uses `HTSU*` class names; those refer to the same HSTU encoder.
 
 ## Overview
 
-HTSU is designed for modeling sequential user interactions with two primary tasks:
-- **Ranking**: Predicting the next action a user will take
-- **Retrieval**: Predicting the next item a user will interact with
+Traditional deep learning recommendation models (DLRMs) score user-item pairs using large sets of hand-engineered features and tend to plateau as compute grows. Generative Recommenders (GRs) instead treat recommendation as a sequential transduction problem: a user's history of items and actions is modeled as a single sequence, and ranking and retrieval become next-token prediction tasks.
 
-This implementation uses:
-- **JAX** for automatic differentiation and XLA compilation
-- **Flax NNX** for modern neural network modules
-- **Optax** for optimization
+- **Ranking**: predicting the next action a user will take
+- **Retrieval**: predicting the next item a user will interact with
 
-### Key Features
+HSTU is the encoder built for this setting. Its main design choices are:
 
-- Complete HTSU architecture with position and temporal biases
-- Multiple architectural variants:
-  - SiLU-based attention (original HTSU)
+- **Pointwise aggregated attention:** replaces softmax normalization, which suits non-stationary item vocabularies and preserves signal about the intensity of user preferences.
+- **Fused gating layer:** an elementwise gate replaces the feed-forward block, cutting linear layers and activation memory.
+- **Relative attention bias:** incorporates both positional and temporal information.
+- **Stochastic Length:** randomly drops parts of long user histories during training to reduce attention cost without hurting quality.
+
+This repo reimplements the HSTU encoder and generative training setup in JAX (Flax NNX + Optax) for functional, JIT-compiled training.
+
+### What's implemented
+
+- HSTU architecture with position and temporal biases
+- Architectural variants:
+  - SiLU-based attention (paper HSTU)
   - Softmax attention baseline
   - FFN ablation studies
   - Positional-only variants (no temporal bias)
 - Synthetic dataset generation matching the paper's Appendix C
-- Comprehensive test suite with 95%+ coverage
+- Ranking and retrieval losses, metrics, and example training scripts
 - Stochastic length sampling for efficient training
-- Ready-to-use loss functions for ranking and retrieval
+
+## Tech Stack
+
+| Component | Tools |
+|-----------|-------|
+| Framework | JAX, Flax NNX |
+| Optimization | Optax |
+| Data | NumPy |
+| Tooling | Python 3.9+, pytest |
 
 ## Installation
 
-### Requirements
-- Python 3.9+
-- JAX 0.4.0+
-- Flax 0.8.0+
-- Optax 0.1.0+
-
-### Install from source
-
 ```bash
-# Clone the repository
-git clone https://github.com/yourusername/jax-htsu.git
-cd jax-htsu
-
-# Install dependencies
+git clone https://github.com/carlychvn/generative-recommenders-jax.git
+cd generative-recommenders-jax
 pip install -e .
 ```
 
-## Quick Start
+Optional extras: `pip install -e ".[dev]"` for tests/linting, or `pip install -e ".[cuda]"` for GPU JAX.
 
-### Basic Usage
+## Quick Start
 
 ```python
 import jax
-import jax.numpy as jnp
 from flax import nnx
 from htsu.layers import HTSULayer
 from htsu.sequencing import interleave_items_and_actions, build_positions, build_timestamps
 from htsu.losses import ranking_loss, retrieval_loss
 
-# Initialize model
 d_model = 128
 num_buckets = 32
 max_distance = 128
@@ -65,55 +67,49 @@ rngs = nnx.Rngs(0)
 
 layer = HTSULayer(d_model, num_buckets, max_distance, rngs)
 
-# Prepare sequential data
-# items: (batch, seq_len, d_model)
-# actions: (batch, seq_len, d_model)
+# items, actions: (batch, seq_len, d_model)
 # timestamps: (batch, seq_len)
-
-# Interleave items and actions
 sequence = interleave_items_and_actions(items, actions)
 positions = build_positions(seq_len)
 timestamps_interleaved = build_timestamps(timestamps)
 
-# Forward pass
 output = layer(sequence, positions, timestamps_interleaved)
 
-# Compute losses
 rank_loss = ranking_loss(output, target_actions, mask)
 retr_loss = retrieval_loss(output, target_items, mask)
 ```
 
-### Training on Synthetic Data
+Generate synthetic data and train:
 
 ```python
 from htsu.synthetic_data import generate_dataset
 
-# Generate synthetic dataset
 dataset = generate_dataset(
     num_records=1000,
     vocab_size=10000,
     num_categories=100,
-    rng=jax.random.PRNGKey(42)
+    rng=jax.random.PRNGKey(42),
 )
+```
 
-# Train your model
-# See examples/train_synthetic.py for complete training loop
+See `examples/train_synthetic.py` for a full training loop, and `examples/README.md` for the other scripts.
+
+```bash
+python examples/quickstart.py
+python examples/train_synthetic.py --mode train --num-steps 3000
+python examples/evaluate.py
 ```
 
 ## Architecture
 
-### HTSU Layer Components
-
-1. **PointwiseProjection**: Projects input and splits into U, Q, V, K via SiLU activation
-2. **RelativeAttentionBias**: Learnable position and time-based bias (T5-style bucketing)
-3. **SpatialAggregation**: SiLU-based attention mechanism (Q·K^T + bias)
+1. **PointwiseProjection**: projects input and splits into U, Q, V, K via SiLU
+2. **RelativeAttentionBias**: learnable position and time bias (T5-style bucketing)
+3. **SpatialAggregation**: SiLU-based attention (`Q·K^T + bias`)
 4. **PointwiseTransformation**: LayerNorm + gating + output projection
-
-### Architectural Variants
 
 ```python
 from htsu.layers import (
-    HTSULayer,                          # Full HTSU with position + time
+    HTSULayer,                          # Full HSTU with position + time
     HTSULayerPositionalOnly,            # Position-only variant
     HTSULayerSoftmax,                   # Softmax attention baseline
     HTSULayerFFN,                       # FFN ablation
@@ -124,108 +120,46 @@ from htsu.layers import (
 ## Project Structure
 
 ```
-jax-htsu/
-├── htsu/                          # Main package
-│   ├── layers.py                  # Core HTSU layer implementations
-│   ├── losses.py                  # Ranking and retrieval loss functions
+├── htsu/
+│   ├── layers.py                  # HSTU layer implementations
+│   ├── losses.py                  # Ranking and retrieval losses
 │   ├── sequencing.py              # Sequence building utilities
 │   ├── stochastic_length.py       # Stochastic length sampling
-│   └── synthetic_data.py          # Synthetic dataset generation
-├── tests/                         # Comprehensive test suite
-│   ├── test_layers.py
-│   ├── test_loss.py
-│   ├── test_sequencing.py
-│   ├── test_stochastic_length.py
-│   ├── test_synthetic_data.py
-│   └── test_htsu_end_to_end.py
-├── scripts/                       # Experimental scripts
-│   ├── overfit_checkpoint.py      # Overfitting test
-│   ├── efficiency.py              # Performance benchmarks
-│   └── comparison.py              # Model comparisons
-└── examples/                      # Usage examples
-    └── train_synthetic.py         # Full training example
+│   ├── synthetic_data.py          # Synthetic dataset generation
+│   ├── metrics.py                 # Ranking / retrieval metrics
+│   └── visualization.py           # Training log helpers
+├── tests/
+├── scripts/                       # Overfit, efficiency, comparison
+└── examples/                      # quickstart, train_synthetic, evaluate
 ```
 
 ## Testing
 
-Run the test suite:
-
 ```bash
-# Run all tests
 pytest
-
-# Run specific test file
 pytest tests/test_layers.py
-
-# Run with coverage
 pytest --cov=htsu --cov-report=html
 ```
 
-## Performance
+## Datasets and Evaluation
 
-HTSU demonstrates efficiency advantages over standard Transformers on long sequences:
+The paper's public-dataset benchmarks are MovieLens-1M, MovieLens-20M, and Amazon Books, compared against a SASRec baseline, with Hit Rate@K and NDCG@K over the full item corpus. This repo currently trains and evaluates on synthetic data; public-dataset training is not wired up yet.
 
-```bash
-# Run efficiency benchmark
-python scripts/efficiency.py
-```
+Metrics available in `htsu.metrics` include Hit Rate@K, NDCG@K, MRR, recall, and precision.
 
-Example results on sequences of length 512:
-- HTSU: ~X ms per forward pass
-- Vanilla Transformer: ~Y ms per forward pass
-
-## Advanced Features
-
-### Stochastic Length Sampling
-
-Subsample sequences while preserving important positions:
+## Stochastic Length Sampling
 
 ```python
 from htsu.stochastic_length import stochastic_length_sample
 
-# Sample subsequence with importance weighting
 subsampled_items, subsampled_actions, subsampled_positions = stochastic_length_sample(
     items, actions, positions, item_ids,
     target_length=128,
-    rng=jax.random.PRNGKey(0)
+    rng=jax.random.PRNGKey(0),
 )
 ```
 
-### Custom Loss Weighting
+## References
 
-```python
-# Combine ranking and retrieval losses
-total_loss = alpha * ranking_loss + beta * retrieval_loss
-```
-
-## Examples
-
-See the `examples/` directory for complete usage examples:
-- `train_synthetic.py`: Full training loop with synthetic data
-- `train_real_data.py`: Training on real datasets (coming soon)
-- `evaluation.py`: Model evaluation and metrics
-
-## Citation
-
-If you use this code in your research, please cite the original HTSU paper:
-
-```bibtex
-@article{htsu,
-  title={HTSU: Hierarchical Temporal Sequential User Modeling},
-  author={Authors},
-  journal={Venue},
-  year={2024}
-}
-```
-
-## Contributing
-
-Contributions are welcome! Please:
-1. Fork the repository
-2. Create a feature branch
-3. Add tests for new functionality
-4. Submit a pull request
-
-## Acknowledgments
-
-This is an independent reimplementation based on the HTSU architecture. Special thanks to the original authors for their work on sequential user modeling.
+- Zhai et al. *Actions Speak Louder than Words: Trillion-Parameter Sequential Transducers for Generative Recommendations.* ICML 2024. [arXiv:2402.17152](https://arxiv.org/abs/2402.17152)
+- Official implementation: [facebookresearch/generative-recommenders](https://github.com/facebookresearch/generative-recommenders)
