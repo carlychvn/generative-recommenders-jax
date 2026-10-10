@@ -1,14 +1,29 @@
+"""Core HTSU layer implementations for sequential user modeling.
+
+This module contains the main HTSU architecture and its variants, including:
+- Full HTSU with position and temporal biases
+- Positional-only variants (no temporal bias)
+- Softmax attention baselines
+- FFN ablations
+- Vanilla Transformer for comparison
+"""
+
 from flax import nnx
 import jax
 import jax.numpy as jnp
 
 
-"""
-    Pointwise Projection:
-    takes one linear layer that widens the input, squashes it with SiLU then chops
-    the result into four equal pieces called U, Q, V, K
-"""
 class PointwiseProjection(nnx.Module):
+    """Pointwise projection layer that expands and splits input into U, Q, V, K.
+
+    Takes input, applies linear projection with widening, applies SiLU activation,
+    then splits the result into four equal pieces: U (gate), Q (query), V (value), K (key).
+
+    Args:
+        din: Input dimension
+        dout: Output dimension (must be divisible by 4)
+        rngs: Flax RNG state
+    """
     def __init__(self, din, dout, rngs):
         self.linear = nnx.Linear(din, dout, rngs=rngs)
 
@@ -197,7 +212,7 @@ class HTSULayer(nnx.Module):
         rab = self.rab(positions, timestamps)
         attention_output = self.spatial_agg(Q, K, V, rab)
         transformed = self.pointwise_transformation(attention_output, U)
-        output = x + transformedx
+        output = x + transformed
         return output
 
 

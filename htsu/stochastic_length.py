@@ -1,3 +1,9 @@
+"""Stochastic length sampling for efficient HTSU training.
+
+Provides importance-weighted subsampling of sequences to reduce computational cost
+while preserving key positions (recent and rare items).
+"""
+
 import jax
 import jax.numpy as jnp
 

@@ -1,6 +1,13 @@
+"""Loss functions for HTSU ranking and retrieval tasks.
+
+Provides loss functions for:
+- Ranking: Predicting the next action a user will take
+- Retrieval: Predicting the next item a user will interact with
+"""
+
 import jax
 import jax.numpy as jnp
-import optax 
+import optax
 from htsu.layers import ActionHead
 
 def ranking_loss(model_output, target_mask, action_labels, action_head):

@@ -1,3 +1,9 @@
+"""Sequence building utilities for HTSU models.
+
+Provides functions to construct interleaved item-action sequences with proper
+positions and timestamps for both ranking and retrieval tasks.
+"""
+
 import jax
 import jax.numpy as jnp
 

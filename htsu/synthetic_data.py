@@ -1,3 +1,10 @@
+"""Synthetic dataset generation for HTSU experiments.
+
+Implements the synthetic data generation procedure from Appendix C of the HTSU paper.
+Generates user interaction sequences with category-based item sampling and
+progressive vocabulary growth.
+"""
+
 import jax
 import jax.numpy as jnp
 

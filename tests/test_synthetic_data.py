@@ -1,3 +1,15 @@
+import jax
+import jax.numpy as jnp
+from flax import nnx
+
+from htsu.layers import (
+    RelativeAttentionBiasPositionalOnly,
+    HTSULayerPositionalOnly,
+    HTSULayerSoftmaxPositionalOnly,
+    compute_relative_distance_bucket,
+)
+
+
 def test_relative_attention_bias_positional_only_shape():
     rngs = nnx.Rngs(0)
     num_buckets = 8
